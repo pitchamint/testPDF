@@ -1,13 +1,14 @@
 package controllers
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/base64"
 	"encoding/csv"
 	"fmt"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 
@@ -104,76 +105,58 @@ func CreateCertificateCSV(c *fiber.Ctx) error {
 				Template: v[4]})
 	}
 
-	m := pdf.NewMaroto(consts.Landscape, consts.A4)
 	// t := time.Now()
 	// ynmStr := t.Format("200601")
-	// var pdfData []byte
-	// var header *zip.FileHeader
 	for i := 0; i < len(courses); i++ {
+		m := pdf.NewMaroto(consts.Landscape, consts.A4)
 		TemplateTest(m, courses[i])
 
-		err := m.OutputFileAndClose("pdfs/div_rhino_fruit.pdf")
-		if err != nil {
-			fmt.Println("⚠️  Could not save PDF:", err)
-			os.Exit(1)
+		//out put return เป็น base 64
+		pdfBytes, _ := m.Output()
+		//len bytes มี 5 ตัว
+		pdfSlice := pdfBytes.Bytes()[:]
+		//len ของ slice มี 5 ตัว
+
+		// Create a new buffer to write the zip archive to
+		var buf bytes.Buffer
+		// Create a new zip archive
+		zipWriter := zip.NewWriter(&buf)
+
+		// Create a new file header for the PDF file
+		fileHeader := &zip.FileHeader{
+			Name:   "example.pdf",
+			Method: zip.Deflate,
 		}
+		// Write the file header to the zip archive
+		pdfFileWriter, err := zipWriter.CreateHeader(fileHeader)
+		if err != nil {
+			fmt.Println(err)
 
-		// m.OutputFileAndClose("test.pdf")
+		}
+		// Write the PDF file content to the zip archive
+		_, err = pdfFileWriter.Write(pdfSlice)
+		if err != nil {
+			fmt.Println(err)
 
-		// c.Set("Content-Type", "application/pdf")
-		// c.Set("Content-Disposition", "attachment; filename="+ynmStr+fmt.Sprint(t.Day())+fmt.Sprint(t.Hour())+fmt.Sprint(t.Minute())+fmt.Sprint(t.Second())+".pdf")
-
-		// Create a new ZIP archive
-		// zipFile, err := os.Create("output.zip")
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	return nil
-		// }
-		// defer zipFile.Close()
-
-		// // Create a new ZIP writer
-		// zipWriter := zip.NewWriter(zipFile)
-		// defer zipWriter.Close()
-
-		// pdfData, err = ioutil.ReadFile("test.pdf")
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	continue
-		// }
-
-		// // Create a new file header for the PDF file
-		// fileInfo, err := os.Stat("test.pdf")
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	continue
-		// }
-		// header, err = zip.FileInfoHeader(fileInfo)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	continue
-		// }
-
-		// // Set the name and method of compression for the file header
-		// header.Name = "test.pdf"
-		// header.Method = zip.Deflate
-
-		// // Create a new file in the ZIP archive and write the PDF data to it
-		// // zipFile, _ = zipWriter.CreateHeader(header)
-		// // if err != nil {
-		// // 	fmt.Println(err)
-		// // 	continue
-		// // }
-		// _, err = zipFile.Write(pdfData)
-		// if err != nil {
-		// 	fmt.Println(err)
-		// 	continue
-		// }
-
+		}
+		// Close the zip archive
+		err = zipWriter.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+		// Write the zip archive to a file
+		err = ioutil.WriteFile("example.zip", buf.Bytes(), 0644)
+		if err != nil {
+			fmt.Println(err)
+		}
+		//ออกเป็นคนสุดท้าย
 	}
+
 	return c.SendString("success")
 }
 
 func TemplateTest(m pdf.Maroto, data models.DetailCertificate) {
+	// m.AddPage()
 	m.RegisterHeader(func() {
 		m.Row(40, func() {
 			m.Col(6, func() {
