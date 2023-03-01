@@ -35,13 +35,6 @@ func CreateCertificate(c *fiber.Ctx) error {
 
 	m := pdf.NewMaroto(consts.Landscape, consts.A4)
 
-	// err = m.FileImage("images/10.png", props.Rect{
-	// 	Left: 30,
-	// })
-	// if err != nil {
-	// 	fmt.Println("Image file was not loaded 😱 - ", err)
-	// }
-
 	//select tamplate
 	if result.Template == "1" {
 		TemplateFirst(m, result, file)
@@ -62,36 +55,21 @@ func CreateCertificate(c *fiber.Ctx) error {
 }
 
 func CreateCertificateCSV(c *fiber.Ctx) error {
-	var fileType, fileName string
 	file, err := c.FormFile("file")
 	if err != nil {
-		fmt.Println("error file is null")
-		return c.Status(401).JSON(err)
-	} else {
-		src, err := file.Open()
-		if err != nil {
-			fmt.Println("error can't open file")
-			return c.Status(500).JSON(err)
-		}
-		fileByte, _ := ioutil.ReadAll(src)
-		fileType = http.DetectContentType(fileByte)
-		if fileType == "application/csv" {
-			fileName = "uploads/" + strconv.FormatInt(time.Now().Unix(), 10) + ".csv"
-		} else {
-			fileName = "uploads/" + strconv.FormatInt(time.Now().Unix(), 10) + ".csv"
-		}
-
-		err = ioutil.WriteFile(fileName, fileByte, 0777)
-		if err != nil {
-			return c.Status(500).JSON(err)
-		}
-		defer src.Close()
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": "Failed to get file"})
+	}
+	logo, err := c.FormFile("logo")
+	if err != nil {
+		return c.Status(http.StatusBadRequest).SendString("missing logo parameter")
 	}
 
 	src, err := file.Open()
 	if err != nil {
 		return c.Status(500).JSON(err)
 	}
+	defer src.Close()
+
 	courses := []models.DetailCertificate{}
 	df := csv.NewReader(src)
 	data, _ := df.ReadAll()
@@ -105,170 +83,56 @@ func CreateCertificateCSV(c *fiber.Ctx) error {
 				Template: v[4]})
 	}
 
-	// t := time.Now()
-	// ynmStr := t.Format("200601")
+	var pdfTest [][]byte
+	var buf *bytes.Buffer
 	for i := 0; i < len(courses); i++ {
 		m := pdf.NewMaroto(consts.Landscape, consts.A4)
-		TemplateTest(m, courses[i])
 
+		if courses[i].Template == "1" {
+			TemplateFirst(m, courses[i], logo)
+		} else if courses[i].Template == "2" {
+			TemplateSecond(m, courses[i], logo)
+		}
 		//out put return เป็น base 64
 		pdfBytes, _ := m.Output()
-		//len bytes มี 5 ตัว
-		pdfSlice := pdfBytes.Bytes()[:]
-		//len ของ slice มี 5 ตัว
+		pdfSlice := pdfBytes.Bytes()
+		pdfTest = append(pdfTest, pdfSlice)
 
-		// Create a new buffer to write the zip archive to
-		var buf bytes.Buffer
-		// Create a new zip archive
-		zipWriter := zip.NewWriter(&buf)
-
-		// Create a new file header for the PDF file
-		fileHeader := &zip.FileHeader{
-			Name:   "example.pdf",
-			Method: zip.Deflate,
-		}
-		// Write the file header to the zip archive
-		pdfFileWriter, err := zipWriter.CreateHeader(fileHeader)
-		if err != nil {
-			fmt.Println(err)
-
-		}
-		// Write the PDF file content to the zip archive
-		_, err = pdfFileWriter.Write(pdfSlice)
-		if err != nil {
-			fmt.Println(err)
-
-		}
-		// Close the zip archive
-		err = zipWriter.Close()
-		if err != nil {
-			fmt.Println(err)
-		}
-		// Write the zip archive to a file
-		err = ioutil.WriteFile("example.zip", buf.Bytes(), 0644)
-		if err != nil {
-			fmt.Println(err)
-		}
-		//ออกเป็นคนสุดท้าย
-	}
-
-	return c.SendString("success")
-}
-
-func TemplateTest(m pdf.Maroto, data models.DetailCertificate) {
-	// m.AddPage()
-	m.RegisterHeader(func() {
-		m.Row(40, func() {
-			m.Col(6, func() {
-				err := m.FileImage("images/header-logo.png", props.Rect{
-					Left:    1,
-					Percent: 100,
-				})
-				if err != nil {
-					fmt.Println("Image file was not loaded 😱 - ", err)
-				}
-			})
-		})
-	})
-
-	m.Row(20, func() {
-		m.Col(12, func() {
-			m.Text("CERTIFICATE", props.Text{
-				Style:  consts.Bold,
-				Align:  consts.Center,
-				Family: consts.Arial,
-				Size:   54,
-				Color:  getDarkPurpleColor(),
-			})
-			m.Text("OF COMPLETION", props.Text{
-				Top:   150,
-				Style: consts.Bold,
-				Align: consts.Center,
-				Size:  32,
-				Color: getDarkPurpleColor(),
-			})
-		})
-	})
-	m.Row(18, func() {
-		m.Col(12, func() {
-			m.Text("This certificate is proudly presented to", props.Text{
-				Top:   120,
-				Style: consts.Bold,
-				Align: consts.Center,
-				Size:  14,
-				Color: getDarkPurpleColor(),
-			})
-		})
-	})
-	m.Row(20, func() {
-		m.Col(12, func() {
-			m.Text(data.Name+" "+data.LastName, props.Text{
-				Top:   120,
-				Style: consts.Bold,
-				Align: consts.Center,
-				Size:  26,
-				Color: getDarkPurpleColor(),
-			})
-		})
-	})
-
-	m.Row(15, func() {
-		m.Col(12, func() {
-			m.Text("Successfully completed and received a passing grade in"+" "+data.Course, props.Text{
-				Top:   120,
-				Style: consts.Bold,
-				Align: consts.Center,
-				Size:  16,
-				Color: getDarkPurpleColor(),
-			})
-		})
-	})
-
-	m.Row(20, func() {
-		m.Col(6, func() {
-			m.Text("SIGNATURE", props.Text{
-				Left:  10,
-				Top:   120,
-				Style: consts.Normal,
-				Align: consts.Left,
-				Size:  18,
-				Color: getDarkPurpleColor(),
-			})
-
-			err := m.FileImage("images/sign.png", props.Rect{
-				Top:  30,
-				Left: 10,
-			})
+		buf = new(bytes.Buffer)
+		// Create a new ZIP archive writer that writes to the buffer
+		zipWriter := zip.NewWriter(buf)
+		// Loop through each PDF file and add them to the ZIP archive
+		for i, pdfData := range pdfTest {
+			// Create a new file in the ZIP archive with the name "document_<index>.pdf"
+			pdfFile, err := zipWriter.Create(fmt.Sprintf("document_%d.pdf", i))
 			if err != nil {
-				fmt.Println("Image file was not loaded 😱 - ", err)
+				panic(err)
 			}
-		})
+			// Write the PDF data to the file in the ZIP archive
+			_, err = pdfFile.Write(pdfData)
+			if err != nil {
+				panic(err)
+			}
+		}
 
-		m.Col(6, func() {
-			m.Text("DATE", props.Text{
-				Top:   120,
-				Style: consts.Normal,
-				Align: consts.Center,
-				Size:  18,
-				Color: getDarkPurpleColor(),
-			})
-		})
+		// Close the ZIP archive writer to finalize the ZIP file
+		err := zipWriter.Close()
+		if err != nil {
+			panic(err)
+		}
 
-	})
+		// Set the HTTP headers for the response
+		c.Set("Content-Type", "application/zip")
+		c.Set("Content-Disposition", "attachment; filename=\"documents.zip\"")
 
-	m.Row(15, func() {
-		m.Col(12, func() {
-			m.Text(data.Date, props.Text{
-				Top:   90,
-				Left:  140,
-				Style: consts.Normal,
-				Align: consts.Center,
-				Size:  18,
-				Color: getDarkPurpleColor(),
-			})
-		})
+		// Write the ZIP file data to the HTTP response
+		_, err = c.Write(buf.Bytes())
+		if err != nil {
+			panic(err)
+		}
 
-	})
+	}
+	return c.Send(buf.Bytes())
 }
 
 func TemplateFirst(m pdf.Maroto, data models.DetailCertificate, file *multipart.FileHeader) {
